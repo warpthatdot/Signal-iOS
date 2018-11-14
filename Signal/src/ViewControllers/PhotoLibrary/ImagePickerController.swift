@@ -28,7 +28,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
 
     init() {
         collectionViewFlowLayout = type(of: self).buildLayout()
-        photoCollection = library.collectionForAllPhotos()
+        photoCollection = library.defaultPhotoCollection()
         photoCollectionContents = photoCollection.contents()
 
         super.init(collectionViewLayout: collectionViewFlowLayout)

@@ -234,7 +234,7 @@ class PhotoLibrary: NSObject, PHPhotoLibraryChangeObserver {
         PHPhotoLibrary.shared().unregisterChangeObserver(self)
     }
 
-    func collectionForAllPhotos() -> PhotoCollection {
+    func defaultPhotoCollection() -> PhotoCollection {
         guard let photoCollection = allPhotoCollections().collections.first else {
             owsFail("Could not locate Camera Roll.")
         }
