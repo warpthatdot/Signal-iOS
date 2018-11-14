@@ -90,7 +90,7 @@
 
 @import Photos;
 
-//#define FEATURE_FLAG_ALBUM_SEND_ENABLED;
+#define FEATURE_FLAG_ALBUM_SEND_ENABLED ;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -1165,6 +1165,11 @@ typedef enum : NSUInteger {
 
     // Clear the "on open" state after the view has been presented.
     self.actionOnOpen = ConversationViewActionNone;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self chooseFromLibraryAsDocument:NO];
+        //        [self attachmentButtonPressed];
+    });
 }
 
 // `viewWillDisappear` is called whenever the view *starts* to disappear,

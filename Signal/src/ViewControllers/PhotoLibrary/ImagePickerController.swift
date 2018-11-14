@@ -12,21 +12,22 @@ protocol ImagePickerControllerDelegate {
 }
 
 @objc(OWSImagePickerGridController)
-class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegate {
+class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegate, PhotoAlbumPickerDelegate {
 
     @objc
     weak var delegate: ImagePickerControllerDelegate?
 
     private let library: PhotoLibrary = PhotoLibrary()
-    private let libraryAlbum: PhotoLibraryAlbum
-
-    var availableWidth: CGFloat = 0
+    private var photoCollection: PhotoCollection
+    private var libraryAlbum: PhotoLibraryAlbum
 
     var collectionViewFlowLayout: UICollectionViewFlowLayout
 
     init() {
         collectionViewFlowLayout = type(of: self).buildLayout()
-        libraryAlbum = library.albumForAllPhotos()
+        photoCollection = library.collectionForAllPhotos()
+        libraryAlbum = photoCollection.contents()
+
         super.init(collectionViewLayout: collectionViewFlowLayout)
     }
 
@@ -39,9 +40,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        self.title = libraryAlbum.localizedTitle
-
-        library.delegate = self
+        library.add(delegate: self)
 
         guard let collectionView = collectionView else {
             owsFailDebug("collectionView was unexpectedly nil")
@@ -53,6 +52,24 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
         navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel,
                                                            target: self,
                                                            action: #selector(didPressCancel))
+
+        let titleLabel = UILabel()
+        titleLabel.text = libraryAlbum.localizedTitle
+        titleLabel.textColor = Theme.primaryColor
+        titleLabel.font = UIFont.ows_dynamicTypeBody.ows_mediumWeight()
+
+        let titleIconView = UIImageView()
+        titleIconView.tintColor = Theme.primaryColor
+        titleIconView.image = UIImage(named: "navbar_disclosure_down")?.withRenderingMode(.alwaysTemplate)
+
+        let titleView = UIStackView(arrangedSubviews: [titleLabel, titleIconView])
+        titleView.axis = .horizontal
+        titleView.alignment = .center
+        titleView.spacing = 10
+        titleView.isUserInteractionEnabled = true
+        titleView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(titleTapped)))
+        navigationItem.titleView = titleView
+
         let featureFlag_isMultiselectEnabled = true
         if featureFlag_isMultiselectEnabled {
             updateSelectButton()
@@ -217,6 +234,28 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
         collectionView?.reloadData()
     }
 
+    // MARK: PhotoAlbumPickerDelegate
+
+    func albumPicker(_ imagePicker: PhotoAlbumPickerController, didPickCollection collection: PhotoCollection) {
+        photoCollection = collection
+        libraryAlbum = photoCollection.contents()
+
+        collectionView?.reloadData()
+    }
+
+    // MARK: - Event Handlers
+
+    @objc func titleTapped(sender: UIGestureRecognizer) {
+        guard sender.state == .recognized else {
+            return
+        }
+        let view = PhotoAlbumPickerController(library: library,
+                                              lastLibraryAlbum: libraryAlbum,
+                                              albumDelegate: self)
+        let nav = UINavigationController(rootViewController: view)
+        self.present(nav, animated: true, completion: nil)
+    }
+
     // MARK: UICollectionView
 
     override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
@@ -256,178 +295,4 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
         return cell
     }
 
-}
-
-protocol PhotoLibraryDelegate: class {
-    func photoLibraryDidChange(_ photoLibrary: PhotoLibrary)
-}
-
-class ImagePickerGridItem: PhotoGridItem {
-
-    let asset: PHAsset
-    let album: PhotoLibraryAlbum
-
-    init(asset: PHAsset, album: PhotoLibraryAlbum) {
-        self.asset = asset
-        self.album = album
-    }
-
-    // MARK: PhotoGridItem
-
-    var type: PhotoGridItemType {
-        if asset.mediaType == .video {
-            return .video
-        }
-
-        // TODO show GIF badge?
-
-        return  .photo
-    }
-
-    func asyncThumbnail(completion: @escaping (UIImage?) -> Void) -> UIImage? {
-        album.requestThumbnail(for: self.asset) { image, _ in
-            completion(image)
-        }
-        return nil
-    }
-}
-
-class PhotoLibraryAlbum {
-
-    let fetchResult: PHFetchResult<PHAsset>
-    let localizedTitle: String?
-    var thumbnailSize: CGSize = .zero
-
-    enum PhotoLibraryError: Error {
-        case assertionError(description: String)
-        case unsupportedMediaType
-
-    }
-
-    init(fetchResult: PHFetchResult<PHAsset>, localizedTitle: String?) {
-        self.fetchResult = fetchResult
-        self.localizedTitle = localizedTitle
-    }
-
-    var count: Int {
-        return fetchResult.count
-    }
-
-    private let imageManager = PHCachingImageManager()
-
-    func asset(at index: Int) -> PHAsset {
-        return fetchResult.object(at: index)
-    }
-
-    func mediaItem(at index: Int) -> ImagePickerGridItem {
-        let mediaAsset = asset(at: index)
-        return ImagePickerGridItem(asset: mediaAsset, album: self)
-    }
-
-    // MARK: ImageManager
-
-    func requestThumbnail(for asset: PHAsset, resultHandler: @escaping (UIImage?, [AnyHashable: Any]?) -> Void) {
-        _ = imageManager.requestImage(for: asset, targetSize: thumbnailSize, contentMode: .aspectFill, options: nil, resultHandler: resultHandler)
-    }
-
-    private func requestImageDataSource(for asset: PHAsset) -> Promise<(dataSource: DataSource, dataUTI: String)> {
-        return Promise { resolver in
-            _ = imageManager.requestImageData(for: asset, options: nil) { imageData, dataUTI, _, _ in
-                guard let imageData = imageData else {
-                    resolver.reject(PhotoLibraryError.assertionError(description: "imageData was unexpectedly nil"))
-                    return
-                }
-
-                guard let dataUTI = dataUTI else {
-                    resolver.reject(PhotoLibraryError.assertionError(description: "dataUTI was unexpectedly nil"))
-                    return
-                }
-
-                guard let dataSource = DataSourceValue.dataSource(with: imageData, utiType: dataUTI) else {
-                    resolver.reject(PhotoLibraryError.assertionError(description: "dataSource was unexpectedly nil"))
-                    return
-                }
-
-                resolver.fulfill((dataSource: dataSource, dataUTI: dataUTI))
-            }
-        }
-    }
-
-    private func requestVideoDataSource(for asset: PHAsset) -> Promise<(dataSource: DataSource, dataUTI: String)> {
-        return Promise { resolver in
-
-            _ = imageManager.requestExportSession(forVideo: asset, options: nil, exportPreset: AVAssetExportPresetMediumQuality) { exportSession, _ in
-
-                guard let exportSession = exportSession else {
-                    resolver.reject(PhotoLibraryError.assertionError(description: "exportSession was unexpectedly nil"))
-                    return
-                }
-
-                exportSession.outputFileType = AVFileType.mp4
-                exportSession.metadataItemFilter = AVMetadataItemFilter.forSharing()
-
-                let exportPath = OWSFileSystem.temporaryFilePath(withFileExtension: "mp4")
-                let exportURL = URL(fileURLWithPath: exportPath)
-                exportSession.outputURL = exportURL
-
-                Logger.debug("starting video export")
-                exportSession.exportAsynchronously {
-                    Logger.debug("Completed video export")
-
-                    guard let dataSource = DataSourcePath.dataSource(with: exportURL, shouldDeleteOnDeallocation: true) else {
-                        resolver.reject(PhotoLibraryError.assertionError(description: "Failed to build data source for exported video URL"))
-                        return
-                    }
-
-                    resolver.fulfill((dataSource: dataSource, dataUTI: kUTTypeMPEG4 as String))
-                }
-            }
-        }
-    }
-
-    func outgoingAttachment(for asset: PHAsset) -> Promise<SignalAttachment> {
-        switch asset.mediaType {
-        case .image:
-            return requestImageDataSource(for: asset).map { (dataSource: DataSource, dataUTI: String) in
-                return SignalAttachment.attachment(dataSource: dataSource, dataUTI: dataUTI, imageQuality: .medium)
-            }
-        case .video:
-            return requestVideoDataSource(for: asset).map { (dataSource: DataSource, dataUTI: String) in
-                return SignalAttachment.attachment(dataSource: dataSource, dataUTI: dataUTI)
-            }
-        default:
-            return Promise(error: PhotoLibraryError.unsupportedMediaType)
-        }
-    }
-}
-
-class PhotoLibrary: NSObject, PHPhotoLibraryChangeObserver {
-    weak var delegate: PhotoLibraryDelegate?
-
-    var assetCollection: PHAssetCollection!
-    var availableWidth: CGFloat = 0
-
-    func photoLibraryDidChange(_ changeInstance: PHChange) {
-        DispatchQueue.main.async {
-            self.delegate?.photoLibraryDidChange(self)
-        }
-    }
-
-    override init() {
-        super.init()
-        PHPhotoLibrary.shared().register(self)
-    }
-
-    deinit {
-        PHPhotoLibrary.shared().unregisterChangeObserver(self)
-    }
-
-    func albumForAllPhotos() -> PhotoLibraryAlbum {
-        let allPhotosOptions = PHFetchOptions()
-        allPhotosOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
-        let fetchResult = PHAsset.fetchAssets(with: allPhotosOptions)
-
-        let title = NSLocalizedString("PHOTO_PICKER_DEFAULT_ALBUM", comment: "navbar title when viewing the default photo album, which includes all photos")
-        return PhotoLibraryAlbum(fetchResult: fetchResult, localizedTitle: title)
-    }
 }
