@@ -12,21 +12,24 @@ protocol ImagePickerControllerDelegate {
 }
 
 @objc(OWSImagePickerGridController)
-class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegate, PhotoAlbumPickerDelegate {
+class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegate, PhotoCollectionPickerDelegate {
 
     @objc
     weak var delegate: ImagePickerControllerDelegate?
 
     private let library: PhotoLibrary = PhotoLibrary()
     private var photoCollection: PhotoCollection
-    private var libraryAlbum: PhotoLibraryAlbum
+    private var photoCollectionContents: PhotoCollectionContents
+    private let photoMediaSize = PhotoMediaSize()
 
     var collectionViewFlowLayout: UICollectionViewFlowLayout
+
+    private let titleLabel = UILabel()
 
     init() {
         collectionViewFlowLayout = type(of: self).buildLayout()
         photoCollection = library.collectionForAllPhotos()
-        libraryAlbum = photoCollection.contents()
+        photoCollectionContents = photoCollection.contents()
 
         super.init(collectionViewLayout: collectionViewFlowLayout)
     }
@@ -53,8 +56,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
                                                            target: self,
                                                            action: #selector(didPressCancel))
 
-        let titleLabel = UILabel()
-        titleLabel.text = libraryAlbum.localizedTitle
+        titleLabel.text = photoCollection.localizedTitle()
         titleLabel.textColor = Theme.primaryColor
         titleLabel.font = UIFont.ows_dynamicTypeBody.ows_mediumWeight()
 
@@ -65,7 +67,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
         let titleView = UIStackView(arrangedSubviews: [titleLabel, titleIconView])
         titleView.axis = .horizontal
         titleView.alignment = .center
-        titleView.spacing = 10
+        titleView.spacing = 5
         titleView.isUserInteractionEnabled = true
         titleView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(titleTapped)))
         navigationItem.titleView = titleView
@@ -89,7 +91,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
         // Determine the size of the thumbnails to request
         let scale = UIScreen.main.scale
         let cellSize = collectionViewFlowLayout.itemSize
-        libraryAlbum.thumbnailSize = CGSize(width: cellSize.width * scale, height: cellSize.height * scale)
+        photoMediaSize.thumbnailSize = CGSize(width: cellSize.width * scale, height: cellSize.height * scale)
     }
 
     // MARK: Actions
@@ -177,8 +179,8 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
             return
         }
 
-        let assets: [PHAsset] = indexPaths.compactMap { return self.libraryAlbum.asset(at: $0.row) }
-        let promises = assets.map { return libraryAlbum.outgoingAttachment(for: $0) }
+        let assets: [PHAsset] = indexPaths.compactMap { return photoCollectionContents.asset(at: $0.row) }
+        let promises = assets.map { return photoCollectionContents.outgoingAttachment(for: $0) }
         when(fulfilled: promises).map { attachments in
             self.dismiss(animated: true) {
                 self.delegate?.imagePicker(self, didPickImageAttachments: attachments)
@@ -234,11 +236,13 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
         collectionView?.reloadData()
     }
 
-    // MARK: PhotoAlbumPickerDelegate
+    // MARK: PhotoCollectionPickerDelegate
 
-    func albumPicker(_ imagePicker: PhotoAlbumPickerController, didPickCollection collection: PhotoCollection) {
+    func photoCollectionPicker(_ photoCollectionPicker: PhotoCollectionPickerController, didPickCollection collection: PhotoCollection) {
         photoCollection = collection
-        libraryAlbum = photoCollection.contents()
+        photoCollectionContents = photoCollection.contents()
+
+        titleLabel.text = photoCollection.localizedTitle()
 
         collectionView?.reloadData()
     }
@@ -249,9 +253,9 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
         guard sender.state == .recognized else {
             return
         }
-        let view = PhotoAlbumPickerController(library: library,
-                                              lastLibraryAlbum: libraryAlbum,
-                                              albumDelegate: self)
+        let view = PhotoCollectionPickerController(library: library,
+                                                   lastPhotoCollection: photoCollection,
+                                                   collectionDelegate: self)
         let nav = UINavigationController(rootViewController: view)
         self.present(nav, animated: true, completion: nil)
     }
@@ -262,9 +266,9 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
         if isInBatchSelectMode {
             updateDoneButton()
         } else {
-            let asset = libraryAlbum.asset(at: indexPath.row)
+            let asset = photoCollectionContents.asset(at: indexPath.row)
             firstly {
-                libraryAlbum.outgoingAttachment(for: asset)
+                photoCollectionContents.outgoingAttachment(for: asset)
             }.map { attachment in
                 self.dismiss(animated: true) {
                     self.delegate?.imagePicker(self, didPickImageAttachments: [attachment])
@@ -282,7 +286,7 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
     }
 
     override func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        return libraryAlbum.count
+        return photoCollectionContents.count
     }
 
     override func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
@@ -290,8 +294,8 @@ class ImagePickerGridController: UICollectionViewController, PhotoLibraryDelegat
             owsFail("cell was unexpectedly nil")
         }
 
-        let mediaItem = libraryAlbum.mediaItem(at: indexPath.item)
-        cell.configure(item: mediaItem)
+        let assetItem = photoCollectionContents.assetItem(at: indexPath.item, photoMediaSize: photoMediaSize)
+        cell.configure(item: assetItem)
         return cell
     }
 

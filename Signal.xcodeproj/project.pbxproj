@@ -155,7 +155,7 @@
 		3496744D2076768700080B5F /* OWSMessageBubbleView.m in Sources */ = {isa = PBXBuildFile; fileRef = 3496744C2076768700080B5F /* OWSMessageBubbleView.m */; };
 		3496744F2076ACD000080B5F /* LongTextViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3496744E2076ACCE00080B5F /* LongTextViewController.swift */; };
 		3496955C219B605E00DCFE74 /* ImagePickerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34969559219B605E00DCFE74 /* ImagePickerController.swift */; };
-		3496955D219B605E00DCFE74 /* PhotoAlbumPickerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3496955A219B605E00DCFE74 /* PhotoAlbumPickerController.swift */; };
+		3496955D219B605E00DCFE74 /* PhotoCollectionPickerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3496955A219B605E00DCFE74 /* PhotoCollectionPickerController.swift */; };
 		3496955E219B605E00DCFE74 /* PhotoLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3496955B219B605E00DCFE74 /* PhotoLibrary.swift */; };
 		349EA07C2162AEA800F7B17F /* OWS111UDAttributesMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 349EA07B2162AEA700F7B17F /* OWS111UDAttributesMigration.swift */; };
 		34A55F3720485465002CC6DE /* OWS2FARegistrationViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 34A55F3520485464002CC6DE /* OWS2FARegistrationViewController.m */; };
@@ -808,7 +808,7 @@
 		3496744C2076768700080B5F /* OWSMessageBubbleView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = OWSMessageBubbleView.m; sourceTree = "<group>"; };
 		3496744E2076ACCE00080B5F /* LongTextViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LongTextViewController.swift; sourceTree = "<group>"; };
 		34969559219B605E00DCFE74 /* ImagePickerController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ImagePickerController.swift; sourceTree = "<group>"; };
-		3496955A219B605E00DCFE74 /* PhotoAlbumPickerController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PhotoAlbumPickerController.swift; sourceTree = "<group>"; };
+		3496955A219B605E00DCFE74 /* PhotoCollectionPickerController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PhotoCollectionPickerController.swift; sourceTree = "<group>"; };
 		3496955B219B605E00DCFE74 /* PhotoLibrary.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PhotoLibrary.swift; sourceTree = "<group>"; };
 		349EA07B2162AEA700F7B17F /* OWS111UDAttributesMigration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OWS111UDAttributesMigration.swift; sourceTree = "<group>"; };
 		34A55F3520485464002CC6DE /* OWS2FARegistrationViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = OWS2FARegistrationViewController.m; sourceTree = "<group>"; };
@@ -1739,7 +1739,7 @@
 			isa = PBXGroup;
 			children = (
 				34969559219B605E00DCFE74 /* ImagePickerController.swift */,
-				3496955A219B605E00DCFE74 /* PhotoAlbumPickerController.swift */,
+				3496955A219B605E00DCFE74 /* PhotoCollectionPickerController.swift */,
 				3496955B219B605E00DCFE74 /* PhotoLibrary.swift */,
 			);
 			path = PhotoLibrary;
@@ -3395,7 +3395,7 @@
 				34B3F8931E8DF1710035BE1A /* SignalsNavigationController.m in Sources */,
 				34F308A21ECB469700BB7697 /* OWSBezierPathView.m in Sources */,
 				45B27B862037FFB400A539DF /* DebugUIFileBrowser.swift in Sources */,
-				3496955D219B605E00DCFE74 /* PhotoAlbumPickerController.swift in Sources */,
+				3496955D219B605E00DCFE74 /* PhotoCollectionPickerController.swift in Sources */,
 				34CE88E71F2FB9A10098030F /* ProfileViewController.m in Sources */,
 				3403B95D20EA9527001A1F44 /* OWSContactShareButtonsView.m in Sources */,
 				34B0796D1FCF46B100E248C2 /* MainAppContext.m in Sources */,

@@ -10,14 +10,28 @@ protocol PhotoLibraryDelegate: class {
     func photoLibraryDidChange(_ photoLibrary: PhotoLibrary)
 }
 
-class ImagePickerGridItem: PhotoGridItem {
+class PhotoMediaSize {
+    var thumbnailSize: CGSize
+
+    init() {
+        self.thumbnailSize = .zero
+    }
+
+    init(thumbnailSize: CGSize) {
+        self.thumbnailSize = thumbnailSize
+    }
+}
+
+class PhotoPickerAssetItem: PhotoGridItem {
 
     let asset: PHAsset
-    let album: PhotoLibraryAlbum
+    let album: PhotoCollectionContents
+    let photoMediaSize: PhotoMediaSize
 
-    init(asset: PHAsset, album: PhotoLibraryAlbum) {
+    init(asset: PHAsset, album: PhotoCollectionContents, photoMediaSize: PhotoMediaSize) {
         self.asset = asset
         self.album = album
+        self.photoMediaSize = photoMediaSize
     }
 
     // MARK: PhotoGridItem
@@ -33,18 +47,17 @@ class ImagePickerGridItem: PhotoGridItem {
     }
 
     func asyncThumbnail(completion: @escaping (UIImage?) -> Void) -> UIImage? {
-        album.requestThumbnail(for: self.asset) { image, _ in
+        album.requestThumbnail(for: self.asset, thumbnailSize: photoMediaSize.thumbnailSize) { image, _ in
             completion(image)
         }
         return nil
     }
 }
 
-class PhotoLibraryAlbum {
+class PhotoCollectionContents {
 
     let fetchResult: PHFetchResult<PHAsset>
     let localizedTitle: String?
-    var thumbnailSize: CGSize = .zero
 
     enum PhotoLibraryError: Error {
         case assertionError(description: String)
@@ -67,14 +80,14 @@ class PhotoLibraryAlbum {
         return fetchResult.object(at: index)
     }
 
-    func mediaItem(at index: Int) -> ImagePickerGridItem {
+    func assetItem(at index: Int, photoMediaSize: PhotoMediaSize) -> PhotoPickerAssetItem {
         let mediaAsset = asset(at: index)
-        return ImagePickerGridItem(asset: mediaAsset, album: self)
+        return PhotoPickerAssetItem(asset: mediaAsset, album: self, photoMediaSize: photoMediaSize)
     }
 
     // MARK: ImageManager
 
-    func requestThumbnail(for asset: PHAsset, resultHandler: @escaping (UIImage?, [AnyHashable: Any]?) -> Void) {
+    func requestThumbnail(for asset: PHAsset, thumbnailSize: CGSize, resultHandler: @escaping (UIImage?, [AnyHashable: Any]?) -> Void) {
         _ = imageManager.requestImage(for: asset, targetSize: thumbnailSize, contentMode: .aspectFill, options: nil, resultHandler: resultHandler)
     }
 
@@ -149,26 +162,7 @@ class PhotoLibraryAlbum {
     }
 }
 
-protocol PhotoCollection: class {
-    func localizedTitle() -> String
-    func contents() -> PhotoLibraryAlbum
-}
-
-class PhotoCollectionAllPhotos: PhotoCollection {
-    func localizedTitle() -> String {
-        return NSLocalizedString("PHOTO_PICKER_DEFAULT_ALBUM", comment: "navbar title when viewing the default photo album, which includes all photos")
-    }
-
-    func contents() -> PhotoLibraryAlbum {
-        let allPhotosOptions = PHFetchOptions()
-        allPhotosOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
-        let fetchResult = PHAsset.fetchAssets(with: allPhotosOptions)
-
-        return PhotoLibraryAlbum(fetchResult: fetchResult, localizedTitle: localizedTitle())
-    }
-}
-
-class PhotoCollectionDefault: PhotoCollection {
+class PhotoCollection {
     private let collection: PHAssetCollection
 
     init(collection: PHAssetCollection) {
@@ -183,12 +177,12 @@ class PhotoCollectionDefault: PhotoCollection {
         return localizedTitle
     }
 
-    func contents() -> PhotoLibraryAlbum {
+    func contents() -> PhotoCollectionContents {
         let options = PHFetchOptions()
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
         let fetchResult = PHAsset.fetchAssets(in: collection, options: options)
 
-        return PhotoLibraryAlbum(fetchResult: fetchResult, localizedTitle: localizedTitle())
+        return PhotoCollectionContents(fetchResult: fetchResult, localizedTitle: localizedTitle())
     }
 }
 
@@ -241,22 +235,30 @@ class PhotoLibrary: NSObject, PHPhotoLibraryChangeObserver {
     }
 
     func collectionForAllPhotos() -> PhotoCollection {
-        return PhotoCollectionAllPhotos()
+        guard let photoCollection = allPhotoCollections().collections.first else {
+            owsFail("Could not locate Camera Roll.")
+        }
+        return photoCollection
     }
 
     func allPhotoCollections() -> PhotoCollections {
-        // TODO: Sort
-
         var collections = [PhotoCollection]()
-        collections.append(PhotoCollectionAllPhotos())
+        var collectionIds = Set<String>()
 
         let processPHCollection: (PHCollection) -> Void = { (collection) in
+            // De-duplicate by id.
+            let collectionId = collection.localIdentifier
+            guard !collectionIds.contains(collectionId) else {
+                return
+            }
+            collectionIds.insert(collectionId)
+
             guard let assetCollection = collection as? PHAssetCollection else {
                 owsFailDebug("Asset collection has unexpected type: \(type(of: collection))")
                 return
             }
-            Logger.verbose("----- collection: \(collection.localizedTitle)")
-            let photoCollection = PhotoCollectionDefault(collection: assetCollection)
+            let photoCollection = PhotoCollection(collection: assetCollection)
+            // Hide empty collections.
             guard photoCollection.contents().count > 0 else {
                 return
             }
@@ -274,56 +276,13 @@ class PhotoLibrary: NSObject, PHPhotoLibraryChangeObserver {
         }
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "endDate", ascending: true)]
-        let userCollections: PHFetchResult<PHCollection> =
-            PHAssetCollection.fetchTopLevelUserCollections(with: fetchOptions)
-        processPHCollections(userCollections)
+        // Try to add "Camera Roll" first.
+        processPHAssetCollections(PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .smartAlbumUserLibrary, options: fetchOptions))
+        // User-created albums.
+        processPHCollections(PHAssetCollection.fetchTopLevelUserCollections(with: fetchOptions))
+        // Smart albums.
         processPHAssetCollections(PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: .albumRegular, options: fetchOptions))
 
-//        PHFetchResult *albums = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeSmartAlbum subtype:PHAssetCollectionSubtypeAlbumRegular options:nil];
-//        for (PHAssetCollection *sub in albums)
-//        {
-//            PHFetchResult *fetchResult = [PHAsset fetchAssetsInAssetCollection:sub options:options];
-//        }
-
-        Logger.verbose("userCollections: \(userCollections.count)")
-//        Logger.verbose("userCollections: \(PHAssetCollection.fetchAssetCollections(with: .album, subtype: PHAssetCollectionSubtype, options: <#T##PHFetchOptions?#>).count)")
-        Logger.flush()
-
-//            PHAssetCollection.fetchTopLevelUserCollections(with: nil)
-//        let userCollections : PHFetchResult<PHCollection> =
-//        PHAssetCollection.fetchTopLevelUserCollections(with: nil)
-//        var photoCollections = [PhotoCollection]()
-
         return PhotoCollections(collections: collections)
-//        PHAssetCollection.fetchass
-//        PHAssetCollection.fetchAssetCollections(with: PHAssetCollectionType, subtype: <#T##PHAssetCollectionSubtype#>, options: <#T##PHFetchOptions?#>)
-//        case album
-//        
-//        case smartAlbum
-//        
-//        case moment
-
-//    NSArray *collectionsFetchResults;
-//    NSMutableArray *localizedTitles = [[NSMutableArray alloc] init];
-//
-//    PHFetchResult *smartAlbums = [PHAssetCollection       fetchAssetCollectionsWithType:PHAssetCollectionTypeSmartAlbum
-//    subtype:PHAssetCollectionSubtypeAlbumRegular options:nil];
-//    PHFetchResult *syncedAlbums = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum
-//    subtype:PHAssetCollectionSubtypeAlbumSyncedAlbum options:nil];
-//    PHFetchResult *userCollections = [PHCollectionList fetchTopLevelUserCollectionsWithOptions:nil];
-//
-//    // Add each PHFetchResult to the array
-//    collectionsFetchResults = @[smartAlbums, userCollections, syncedAlbums];
-//
-//    for (int i = 0; i < collectionsFetchResults.count; i ++) {
-//
-//    PHFetchResult *fetchResult = collectionsFetchResults[i];
-//
-//    for (int x = 0; x < fetchResult.count; x ++) {
-//
-//    PHCollection *collection = fetchResult[x];
-//    localizedTitles[x] = collection.localizedTitle;
-//
-//    }
     }
 }
